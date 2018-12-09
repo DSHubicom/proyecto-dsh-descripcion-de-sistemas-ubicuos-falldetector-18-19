@@ -1,0 +1,12 @@
+#############################
+#Tipo de Datos "FallDetector"
+#############################
+
+FallDetector	KEYWORD1
+
+#####################################
+#Funciones de la clase "FallDetector"
+#####################################
+
+ejecucion	KEYWORD2
+configuracionInicial	KEYWORD2

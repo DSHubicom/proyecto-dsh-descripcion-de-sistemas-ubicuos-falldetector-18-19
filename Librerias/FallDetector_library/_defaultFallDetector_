@@ -1,0 +1,113 @@
+/** 
+ _____     _ _ ____       _            _             
+|  ___|_ _| | |  _ \  ___| |_ ___  ___| |_ ___  _ __ 
+| |_ / _` | | | | | |/ _ \ __/ _ \/ __| __/ _ \| '__|
+|  _| (_| | | | |_| |  __/ ||  __/ (__| || (_) | |   
+|_|  \__,_|_|_|____/ \___|\__\___|\___|\__\___/|_|   
+                                                     
+------------------------------------------------------
+
+Sistema Inteligente de Detección y Aviso ante caídas
+
+------------------------------------------------------
+	Desarrollado por:
+	Grupo 2:
+		- Sergio Laso
+		- José Manuel Romero Muelas
+		- Sergio Zabala Mesonero
+	Asignatura: Descripción de Sistemas Hardware
+	Máster en Ingeniería Informática - Curso 2018/19
+------------------------------------------------------ **/
+
+/** Implementación de la Clase 'FallDetector' **/
+
+#include "FallDetector.h"
+
+/** Constructor de la clase**/
+FallDetector::FallDetector():mpu(0x68){
+	ax = 0;
+	ay = 0;
+	az = 0;
+	gx = 0;
+	gy = 0;
+	gz = 0;
+	AC = 0;
+	GC = 0;
+	start_millis = 0;
+	caida = false;
+}
+/** Inicialización del entorno necesario para el funcionamiento del
+	sistema completo **/
+void FallDetector::configuracionInicial(){
+	Serial.begin(9600);
+	Wire.begin();
+	mpu.initialize();/*Inicializar Acel + Girosc*/
+	Serial.println(mpu.testConnection() ? F("IMU iniciado correctamente") : F("Error al iniciar IMU"));
+	pinMode(boton,INPUT);/*Estado del Botón: LOW-Levantado, HIGH- Pulsado*/
+}
+/** Función para la lectura de los valores arrojados por el acelerómetro
+	y el giroscopio **/
+void FallDetector::leerValores(){
+	mpu.getAcceleration(&ax, &ay, &az);
+	mpu.getRotation(&gx, &gy, &gz);
+	AC=abs(ax * accScale)+abs(ay*accScale)+abs(az*accScale);
+	GC=abs(gx * accScale)+abs(gy*accScale)+abs(gz*accScale);
+}
+/** Imprimir valores absolutos de las mediciones **/
+void FallDetector::mostrarValores(){
+	Serial.print(F("AC: "));
+	Serial.println(AC);
+	Serial.print(F("GC: "));
+	Serial.println(GC);
+	Serial.println(F("---------------------"));
+}
+/** Comprobación de los valores para evaluar si se ha cumplido la 
+	condición de caída **/
+void FallDetector::comprobarValores(){
+		if ( AC>= UMBRAL_AC && GC >= UMBRAL_GC && !caida ){
+		Serial.println("AVISO: Detectada condición de caída");
+		caida = true;
+		start_millis = millis();
+	}	  
+}
+/** Función para la gestión de las distintas tareas que se realizan 
+	una vez ha sucedido el evento de caída:
+		-Si han pasado menos de 10 segundos desde el inicio de la posible caída,
+		 entonces el zumbador sonará.
+		-Si se ha superado ese intrevalo de aviso al usuario sin recibir respuesta 
+		 (pulsación del botón), entonces se activará el procedimiento de alarma
+		 	· Se envía SMS
+		 	· Se indica localización del afectado **/
+void FallDetector::tareasCaidaActiva(){
+	if (caida){
+		if ( (millis() -start_millis) < 10000 ){ /*Se avisa al usuario durante 10 segundos a la espera de respuesta*/
+    	//tone(buzzer,1000); // Send 1KHz sound signal... 
+    	Serial.println("---------------------> El buzzer está sonando");
+		}
+		else { /*Si el usuario no ha cancelado el aviso, se activan las tareas de alerta.*/
+    		Serial.println("Enviando Mensaje...");
+    		caida = false;
+    		delay(5000);
+    	}
+	}		
+}
+/**  Procedimiento encargado de comprobar si el botón ha sido
+	 o no pulsado, para cancelar el procedimiento de alerta ante caídas. **/
+void FallDetector::accionesBoton(){
+		if ( digitalRead(boton) == HIGH ){
+    	Serial.println("############### Boton Pulsado ##############");
+    	if (caida) caida = false;  
+		}		
+}
+/** Procedimiento principal del sistema detector de caídas 'FallDetector'.
+	Realiza todas las funciones (leer mediciones, comprobar si exceden el umbral etc)
+	con un intervalo de parada de 300ms. **/
+
+void FallDetector::ejecucion(){
+	leerValores();
+	mostrarValores();
+	comprobarValores();
+	tareasCaidaActiva();
+	accionesBoton();
+	delay(300);
+}
